@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Laporan Keuangan</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1b1f27;--mut:#667085;--bd:#e3e6ec;--inc:#12a36b;--out:#e5484d;--acc:#3b5bdb;--accbg:#e8edff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#12151b;--card:#1b2029;--tx:#eceff4;--mut:#98a2b3;--bd:#2b3240;--inc:#3ddc97;--out:#ff7b80;--acc:#8ea2ff;--accbg:#262e4d}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#12151b;--card:#1b2029;--tx:#eceff4;--mut:#98a2b3;--bd:#2b3240;--inc:#3ddc97;--out:#ff7b80;--acc:#8ea2ff;--accbg:#262e4d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 14px}
+h2{font-size:15px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+button,select,input{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:8px 12px}
+button{cursor:pointer}
+.tab.on{background:var(--accbg);border-color:var(--acc);color:var(--acc);font-weight:600}
+.nav{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nav .sp{flex:1}
+.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+:root[data-theme="dark"] .primary{color:#12151b}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:12px}
+.grid .card{margin:0}
+.lbl{color:var(--mut);font-size:13px}
+.val{font-size:21px;font-weight:700;margin-top:2px;word-break:break-word}
+.inc{color:var(--inc)}.out{color:var(--out)}
+.sub{font-size:13px;color:var(--mut);margin-top:4px}
+.chartbox{position:relative;height:280px}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--bd)}
+th{color:var(--mut);font-weight:600}
+td.r,th.r{text-align:right}
+.bar{height:8px;border-radius:4px;background:var(--out);min-width:2px}
+.cat{display:grid;grid-template-columns:110px 1fr 120px;gap:10px;align-items:center;padding:5px 0;font-size:14px}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.x{padding:2px 8px;color:var(--out)}
+.note{color:var(--mut);font-size:13px}
+@media (max-width:520px){.cat{grid-template-columns:90px 1fr;}.cat .amt{grid-column:1/3;text-align:right}}
+</style>
+</head>
+<body>
+<main>
+<h1>Laporan Keuangan</h1>
+
+<div class="tabs" id="tabs">
+  <button class="tab" data-t="week">Mingguan</button>
+  <button class="tab" data-t="month">Bulanan</button>
+  <button class="tab" data-t="year">Tahunan</button>
+</div>
+
+<div class="card nav">
+  <button id="prev" aria-label="Periode sebelumnya">‹</button>
+  <select id="selYear" aria-label="Tahun"></select>
+  <select id="selMonth" aria-label="Bulan"></select>
+  <select id="selWeek" aria-label="Minggu"></select>
+  <button id="next" aria-label="Periode berikutnya">›</button>
+  <span class="sp"></span>
+  <button id="export" class="primary">Export Excel (.xlsx)</button>
+</div>
+
+<div id="period" class="lbl" style="margin:0 2px 8px"></div>
+
+<div class="grid">
+  <div class="card"><div class="lbl">Total pemasukan</div><div class="val inc" id="sIn"></div></div>
+  <div class="card"><div class="lbl">Total pengeluaran</div><div class="val out" id="sOut"></div></div>
+  <div class="card"><div class="lbl">Saldo bersih</div><div class="val" id="sNet"></div></div>
+  <div class="card"><div class="lbl">Kategori pengeluaran terbesar</div><div class="val" id="sTop" style="font-size:18px"></div><div class="sub" id="sTopSub"></div></div>
+</div>
+
+<div class="card" id="cmpCard">
+  <h2 id="cmpTitle"></h2>
+  <div class="scroll"><table id="cmpTbl"></table></div>
+</div>
+
+<div class="card">
+  <h2 id="chartTitle"></h2>
+  <div class="chartbox"><canvas id="chart"></canvas></div>
+</div>
+
+<div class="card">
+  <h2 id="catTitle">Kategori pengeluaran</h2>
+  <div id="cats"></div>
+  <div class="sub" id="catInsight"></div>
+</div>
+
+<div class="card">
+  <h2>Tambah transaksi</h2>
+  <div class="form">
+    <input type="date" id="fDate">
+    <select id="fType"><option value="out">Pengeluaran</option><option value="in">Pemasukan</option></select>
+    <select id="fCat"></select>
+    <input type="number" id="fAmt" placeholder="Jumlah (Rp)" min="1" inputmode="numeric">
+    <input type="text" id="fNote" placeholder="Catatan (opsional)">
+    <button id="fAdd" class="primary">Simpan</button>
+  </div>
+  <div class="note" style="margin-top:8px">Data contoh sudah terisi agar laporan langsung terlihat. <a href="#" id="reset">Reset ke data contoh</a> · <a href="#" id="clear">Kosongkan semua</a></div>
+</div>
+
+<div class="card">
+  <h2>Transaksi pada periode ini</h2>
+  <div class="scroll"><table id="txTbl"></table></div>
+</div>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+const MON=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const MS=MON.map(m=>m.slice(0,3));
+const DAY=['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
+const OUT=['Makanan','Transportasi','Belanja','Tagihan','Hiburan','Kesehatan','Lainnya'];
+const INC=['Gaji','Freelance','Bonus','Lainnya'];
+const KEY='fin_tx_v1';
+const fmt=n=>'Rp '+Math.round(n).toLocaleString('id-ID');
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse=s=>{const a=s.split('-').map(Number);return new Date(a[0],a[1]-1,a[2])};
+const addDays=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+const monday=d=>addDays(d,-((d.getDay()+6)%7));
+const dm=d=>d.getDate()+' '+MS[d.getMonth()];
+const isoYear=d=>addDays(monday(d),3).getFullYear();
+
+/* ---------- data ---------- */
+let tx=[];
+function seed(){
+  let s=20261109;const r=()=>(s=(s*1664525+1013904223)%4294967296)/4294967296;
+  const out=[],t=new Date();const start=new Date(t.getFullYear()-1,0,1);
+  for(let d=new Date(start);d<=t;d=addDays(d,1)){
+    const date=iso(d);
+    if(d.getDate()===25)out.push({id:'s'+out.length,d:date,k:'in',c:'Gaji',a:7500000,n:'Gaji bulanan'});
+    if(r()<0.04)out.push({id:'s'+out.length,d:date,k:'in',c:r()<.5?'Freelance':'Bonus',a:Math.round((300+r()*1200)/50)*50000/50,n:''});
+    const n=r()<.35?0:r()<.7?1:2;
+    for(let i=0;i<n;i++){const c=OUT[Math.floor(r()*r()*OUT.length)];
+      const base={Makanan:40000,Transportasi:25000,Belanja:150000,Tagihan:300000,Hiburan:100000,Kesehatan:120000,Lainnya:50000}[c];
+      out.push({id:'s'+out.length,d:date,k:'out',c:c,a:Math.round(base*(.5+r()*1.5)/1000)*1000,n:''});}
+  }
+  return out;
+}
+function load(){try{const v=localStorage.getItem(KEY);if(v){tx=JSON.parse(v);return}}catch(e){}tx=seed();save()}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(tx))}catch(e){}}
+
+/* ---------- periode ---------- */
+const st={type:'month',cur:new Date()};
+function range(type,c){
+  if(type==='week'){const s=monday(c);return{s:s,e:addDays(s,6)}}
+  if(type==='month')return{s:new Date(c.getFullYear(),c.getMonth(),1),e:new Date(c.getFullYear(),c.getMonth()+1,0)};
+  return{s:new Date(c.getFullYear(),0,1),e:new Date(c.getFullYear(),11,31)};
+}
+function shift(type,c,k){
+  if(type==='week')return addDays(c,7*k);
+  if(type==='month')return new Date(c.getFullYear(),c.getMonth()+k,1);
+  return new Date(c.getFullYear()+k,0,1);
+}
+const inRange=(list,r)=>{const a=iso(r.s),b=iso(r.e);return list.filter(t=>t.d>=a&&t.d<=b)};
+const sum=l=>l.reduce((o,t)=>{o[t.k]+=t.a;return o},{in:0,out:0});
+function buckets(type,r,list){
+  let labels;
+  if(type==='week')labels=DAY.slice();
+  else if(type==='month')labels=Array.from({length:Math.ceil(r.e.getDate()/7)},(_,i)=>'Mgg '+(i+1));
+  else labels=MS.slice();
+  const inc=labels.map(()=>0),out=labels.map(()=>0);
+  list.forEach(t=>{const d=parse(t.d);
+    const i=type==='week'?(d.getDay()+6)%7:type==='month'?Math.floor((d.getDate()-1)/7):d.getMonth();
+    (t.k==='in'?inc:out)[i]+=t.a});
+  return{labels:labels,inc:inc,out:out};
+}
+function cats(list){
+  const m={};list.filter(t=>t.k==='out').forEach(t=>m[t.c]=(m[t.c]||0)+t.a);
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+}
+function label(type,r){
+  if(type==='week')return'Minggu '+dm(r.s)+' – '+dm(r.e)+' '+r.e.getFullYear();
+  if(type==='month')return MON[r.s.getMonth()]+' '+r.s.getFullYear();
+  return'Tahun '+r.s.getFullYear();
+}
+function compare(type){
+  if(type==='week')return null;
+  const pr=range(type,shift(type,st.cur,-1));
+  return{r:pr,l:label(type,pr),s:sum(inRange(tx,pr))};
+}
+const pct=(a,b)=>b===0?(a===0?'0%':'baru'):((a-b)/b*100).toFixed(1).replace('.',',')+'%';
+
+/* ---------- kontrol ---------- */
+function fillControls(){
+  const ys=tx.map(t=>+t.d.slice(0,4)),now=new Date().getFullYear();
+  const y=st.type==='week'?isoYear(st.cur):st.cur.getFullYear();
+  const lo=Math.min(now,y,...ys),hi=Math.max(now,y,...ys);
+  $('#selYear').innerHTML=Array.from({length:hi-lo+1},(_,i)=>lo+i).map(v=>'<option'+(v===y?' selected':'')+'>'+v+'</option>').join('');
+  $('#selMonth').innerHTML=MON.map((m,i)=>'<option value="'+i+'"'+(i===st.cur.getMonth()?' selected':'')+'>'+m+'</option>').join('');
+  let h='',w=monday(new Date(y,0,4)),i=1;const cw=iso(monday(st.cur));
+  while(addDays(w,3).getFullYear()===y){h+='<option value="'+iso(w)+'"'+(iso(w)===cw?' selected':'')+'>Mgg '+i+' · '+dm(w)+' – '+dm(addDays(w,6))+'</option>';w=addDays(w,7);i++}
+  $('#selWeek').innerHTML=h;
+  $('#selMonth').style.display=st.type==='month'?'':'none';
+  $('#selWeek').style.display=st.type==='week'?'':'none';
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===st.type));
+}
+$('#tabs').onclick=e=>{const t=e.target.dataset.t;if(t){st.type=t;render()}};
+$('#prev').onclick=()=>{st.cur=shift(st.type,st.cur,-1);render()};
+$('#next').onclick=()=>{st.cur=shift(st.type,st.cur,1);render()};
+$('#selYear').onchange=e=>{const y=+e.target.value;
+  st.cur=st.type==='week'?new Date(y,0,4):new Date(y,st.type==='month'?st.cur.getMonth():0,1);render()};
+$('#selMonth').onchange=e=>{st.cur=new Date(st.cur.getFullYear(),+e.target.value,1);render()};
+$('#selWeek').onchange=e=>{st.cur=addDays(parse(e.target.value),3);render()};
+
+/* ---------- render ---------- */
+let chart;
+function render(){
+  fillControls();
+  const r=range(st.type,st.cur),list=inRange(tx,r),s=sum(list),net=s.in-s.out;
+  $('#period').textContent=label(st.type,r)+' · '+list.length+' transaksi';
+  $('#sIn').textContent=fmt(s.in);$('#sOut').textContent=fmt(s.out);
+  $('#sNet').textContent=(net<0?'-':'')+fmt(Math.abs(net));
+  $('#sNet').className='val '+(net<0?'out':'inc');
+  const cs=cats(list);
+  if(cs.length){$('#sTop').textContent=cs[0][0];$('#sTopSub').textContent=fmt(cs[0][1])+' ('+(cs[0][1]/s.out*100).toFixed(1).replace('.',',')+'% dari pengeluaran)'}
+  else{$('#sTop').textContent='–';$('#sTopSub').textContent='Belum ada pengeluaran'}
+
+  const cmp=compare(st.type);
+  $('#cmpCard').style.display=cmp?'':'none';
+  if(cmp){
+    $('#cmpTitle').textContent='Perbandingan dengan '+(st.type==='month'?'bulan':'tahun')+' sebelumnya ('+cmp.l+')';
+    const row=(n,a,b,goodUp)=>{const d=a-b,cls=d===0?'':((d>0)===goodUp?'inc':'out');
+      return'<tr><td>'+n+'</td><td class="r">'+fmt(a)+'</td><td class="r">'+fmt(b)+'</td><td class="r '+cls+'">'+(d>0?'+':d<0?'-':'')+fmt(Math.abs(d))+' ('+pct(a,b)+')</td></tr>'};
+    $('#cmpTbl').innerHTML='<tr><th></th><th class="r">Periode ini</th><th class="r">Sebelumnya</th><th class="r">Selisih</th></tr>'
+      +row('Pemasukan',s.in,cmp.s.in,true)+row('Pengeluaran',s.out,cmp.s.out,false)+row('Saldo bersih',net,cmp.s.in-cmp.s.out,true);
+  }
+
+  const b=buckets(st.type,r,list);
+  $('#chartTitle').textContent='Pemasukan vs pengeluaran per '+(st.type==='week'?'hari':st.type==='month'?'minggu':'bulan');
+  const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  if(chart)chart.destroy();
+  chart=new Chart($('#chart'),{type:'bar',data:{labels:b.labels,datasets:[
+    {label:'Pemasukan',data:b.inc,backgroundColor:cssv('--inc'),borderRadius:4},
+    {label:'Pengeluaran',data:b.out,backgroundColor:cssv('--out'),borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:cssv('--tx')}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y)}}},
+      scales:{x:{ticks:{color:cssv('--mut')},grid:{display:false}},
+        y:{beginAtZero:true,ticks:{color:cssv('--mut'),callback:v=>v>=1e6?(v/1e6)+' jt':v>=1e3?(v/1e3)+' rb':v},grid:{color:cssv('--bd')}}}}});
+
+  $('#catTitle').textContent=st.type==='year'?'Analisis kategori pengeluaran sepanjang tahun':'Kategori pengeluaran';
+  const mx=cs.length?cs[0][1]:1;
+  $('#cats').innerHTML=cs.length?cs.map(c=>'<div class="cat"><span>'+c[0]+'</span><div><div class="bar" style="width:'+(c[1]/mx*100)+'%"></div></div><span class="amt r" style="text-align:right">'+fmt(c[1])+' · '+(c[1]/s.out*100).toFixed(1).replace('.',',')+'%</span></div>').join(''):'<div class="note">Belum ada pengeluaran pada periode ini.</div>';
+  let ins='';
+  if(st.type==='year'&&cs.length){
+    const top=cs[0][0],per=Array(12).fill(0);
+    list.filter(t=>t.k==='out'&&t.c===top).forEach(t=>per[parse(t.d).getMonth()]+=t.a);
+    const mi=per.indexOf(Math.max(...per));
+    const mb=b.out.indexOf(Math.max(...b.out));
+    ins=top+' adalah kategori terbesar ('+(cs[0][1]/s.out*100).toFixed(1).replace('.',',')+'% dari total pengeluaran) dan paling tinggi pada '+MON[mi]+' ('+fmt(per[mi])+'). Bulan dengan pengeluaran terbesar: '+MON[mb]+' ('+fmt(b.out[mb])+').';
+  }
+  $('#catInsight').textContent=ins;
+
+  const sorted=list.slice().sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:0);
+  $('#txTbl').innerHTML='<tr><th>Tanggal</th><th>Jenis</th><th>Kategori</th><th>Catatan</th><th class="r">Jumlah</th><th></th></tr>'
+    +(sorted.length?sorted.slice(0,200).map(t=>'<tr><td>'+t.d.split('-').reverse().join('/')+'</td><td>'+(t.k==='in'?'Pemasukan':'Pengeluaran')+'</td><td>'+t.c+'</td><td>'+(t.n||'').replace(/</g,'&lt;')+'</td><td class="r '+t.k+'">'+(t.k==='in'?'+':'-')+fmt(t.a)+'</td><td><button class="x" data-id="'+t.id+'" aria-label="Hapus">✕</button></td></tr>').join('')
+      +(sorted.length>200?'<tr><td colspan="6" class="note">Menampilkan 200 transaksi terbaru; export Excel memuat semuanya.</td></tr>':'')
+      :'<tr><td colspan="6" class="note">Belum ada transaksi pada periode ini.</td></tr>');
+}
+$('#txTbl').onclick=e=>{const id=e.target.dataset.id;if(id){tx=tx.filter(t=>t.id!==id);save();render()}};
+
+/* ---------- form ---------- */
+function fillCat(){$('#fCat').innerHTML=($('#fType').value==='in'?INC:OUT).map(c=>'<option>'+c+'</option>').join('')}
+$('#fType').onchange=fillCat;
+$('#fAdd').onclick=()=>{
+  const a=+$('#fAmt').value,d=$('#fDate').value;
+  if(!d||!(a>0)){alert('Isi tanggal dan jumlah yang valid.');return}
+  tx.push({id:'u'+Date.now(),d:d,k:$('#fType').value,c:$('#fCat').value,a:Math.round(a),n:$('#fNote').value.trim()});
+  save();$('#fAmt').value='';$('#fNote').value='';
+  st.cur=parse(d);render();
+};
+$('#reset').onclick=e=>{e.preventDefault();tx=seed();save();render()};
+$('#clear').onclick=e=>{e.preventDefault();if(confirm('Hapus semua transaksi?')){tx=[];save();render()}};
+
+/* ---------- export Excel ---------- */
+async function exportXlsx(){
+  if(!window.XLSX){alert('Pustaka Excel belum termuat.');return}
+  const type=st.type,r=range(type,st.cur),list=inRange(tx,r).sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0);
+  const s=sum(list),b=buckets(type,r,list),cs=cats(list),cmp=compare(type);
+  const per=type==='week'?'Hari':type==='month'?'Minggu':'Bulan';
+  const A=[['Laporan Keuangan '+{week:'Mingguan',month:'Bulanan',year:'Tahunan'}[type]],['Periode',label(type,r)],
+    ['Rentang tanggal',iso(r.s)+' s.d. '+iso(r.e)],[],
+    ['Ringkasan','Jumlah (Rp)'],['Total pemasukan',s.in],['Total pengeluaran',s.out],['Saldo bersih',s.in-s.out]];
+  if(cmp){A.push([],['Perbandingan dengan '+cmp.l,'Periode ini','Sebelumnya','Selisih']);
+    A.push(['Pemasukan',s.in,cmp.s.in,s.in-cmp.s.in],['Pengeluaran',s.out,cmp.s.out,s.out-cmp.s.out],['Saldo bersih',s.in-s.out,cmp.s.in-cmp.s.out,(s.in-s.out)-(cmp.s.in-cmp.s.out)])}
+  A.push([],[per,'Pemasukan','Pengeluaran','Saldo']);
+  b.labels.forEach((l,i)=>A.push([l,b.inc[i],b.out[i],b.inc[i]-b.out[i]]));
+  A.push([],['Kategori pengeluaran','Jumlah','Persentase']);
+  const c0=A.length;
+  cs.forEach(c=>A.push([c[0],c[1],s.out?c[1]/s.out:0]));
+  const ws1=XLSX.utils.aoa_to_sheet(A);
+  Object.keys(ws1).forEach(k=>{if(k[0]!=='!'&&ws1[k].t==='n')ws1[k].z='#,##0'});
+  for(let i=0;i<cs.length;i++){const c=ws1['C'+(c0+i+1)];if(c)c.z='0.0%'}
+  ws1['!cols']=[{wch:34},{wch:18},{wch:18},{wch:18}];
+  const B=[['Tanggal','Jenis','Kategori','Catatan','Jumlah (Rp)']];
+  list.forEach(t=>B.push([t.d.split('-').reverse().join('/'),t.k==='in'?'Pemasukan':'Pengeluaran',t.c,t.n||'',t.a]));
+  B.push([],['Total pemasukan','','','',s.in],['Total pengeluaran','','','',s.out],['Saldo bersih','','','',s.in-s.out]);
+  const ws2=XLSX.utils.aoa_to_sheet(B);
+  Object.keys(ws2).forEach(k=>{if(k[0]!=='!'&&ws2[k].t==='n')ws2[k].z='#,##0'});
+  ws2['!cols']=[{wch:14},{wch:13},{wch:15},{wch:32},{wch:16}];
+  ws2['!autofilter']={ref:'A1:E'+(list.length+1)};
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws1,'Ringkasan');
+  XLSX.utils.book_append_sheet(wb,ws2,'Transaksi');
+  const name='Laporan_'+{week:'Mingguan_'+iso(r.s),month:'Bulanan_'+r.s.getFullYear()+'-'+pad(r.s.getMonth()+1),year:'Tahunan_'+r.s.getFullYear()}[type]+'.xlsx';
+  let dl=null;
+  try{dl=window.claude&&await claude.use('downloads')}catch(e){}
+  if(dl){try{await dl.save({filename:name,data:XLSX.write(wb,{bookType:'xlsx',type:'array'})})}catch(e){if(e&&e.code!=='declined')alert('Gagal menyimpan file Excel.')}}
+  else XLSX.writeFile(wb,name);
+}
+$('#export').onclick=exportXlsx;
+
+/* ---------- init ---------- */
+load();
+$('#fDate').value=iso(new Date());
+fillCat();
+render();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',render);
+</script>
+</body>
+</html>
